@@ -1,0 +1,29 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Packet {
+  id           Int      @id @default(autoincrement())
+  resi         String   @unique
+  customer_name String
+  address      String
+  order        String
+  device_id    String?  @unique // Optional, untuk ID alat ESP32
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
+
+model Device {
+  id          Int      @id @default(autoincrement())
+  device_id   String   @unique
+  status      String
+  last_seen   DateTime
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
