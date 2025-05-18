@@ -3,8 +3,21 @@ import mqtt, { MqttClient } from 'mqtt';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const subscribedTopics = new Set<string>();
 
 let client: MqttClient | null = null;
+
+export const clearRetainedMessage = (topic: string) => {
+  if (client?.connected) {
+    client.publish(topic, '', { retain: true }, (err) => {
+      if (err) {
+        console.error(`❌ Failed to clear retained message for ${topic}:`, err);
+      } else {
+        console.log(`🧹 Cleared retained message for ${topic}`);
+      }
+    });
+  }
+};
   
 export const connectMqtt = (): MqttClient => {
   if (client && client.connected) {
@@ -41,11 +54,17 @@ export const subscribeToTopic = (topic: string, callback?: (err: Error | null) =
     console.error('❌ MQTT client not initialized');
     return;
   }
+
+  if (subscribedTopics.has(topic)) {
+    console.log(`⚠️ Already subscribed to ${topic}`);
+    return;
+  }
+
   client.subscribe(topic, (err) => {
     if (err) {
       console.error(`❌ Failed to subscribe to ${topic}:`, err);
     } else {
-      console.log(`📡 Subscribed to ${topic}`);
+      subscribedTopics.add(topic);
     }
     callback?.(err);
   });
@@ -54,34 +73,46 @@ export const subscribeToTopic = (topic: string, callback?: (err: Error | null) =
 export const startMqttService = () => {
   const mqttClient = connectMqtt();
 
-  mqttClient.on('connect', () => {
-    console.log('✅ MQTT Service: Connected to broker');
+  mqttClient.on('connect', async () => {
+    // 🔄 Ambil semua device dan hapus retained messages untuk topik register dan status
+    try {
+      const devices = await prisma.device.findMany();
+      devices.forEach((device) => {
+        clearRetainedMessage(`parcela/${device.device_id}/register`);
+        clearRetainedMessage(`parcela/${device.device_id}/status`);
+      });
+    } catch (err) {
+      console.error('❌ Failed to fetch devices for clearing retained messages:', err);
+    }
 
-    subscribeToTopic('parcela/+/register', (err) => {
+    // 📡 Subscribe ke topik-topik penting
+    const registerTopic = 'parcela/+/register';
+    subscribeToTopic(registerTopic, (err) => {
       if (err) {
-        console.error('❌ Failed to subscribe to parcela/+/register:', err);
+        console.error(`❌ Failed to subscribe to ${registerTopic}:`, err);
       } else {
-        console.log('📡 Subscribed to parcela/+/register');
+        console.log(`📡 Subscribed to ${registerTopic}`);
       }
     });
 
-    // ✅ SUBSCRIBE ke topik LWT
-    subscribeToTopic('parcela/+/status', (err) => {
+    const statusTopic = 'parcela/+/status';
+    subscribeToTopic(statusTopic, (err) => {
       if (err) {
-        console.error('❌ Failed to subscribe to parcela/+/status:', err);
+        console.error(`❌ Failed to subscribe to ${statusTopic}:`, err);
       } else {
-        console.log('📡 Subscribed to parcela/+/status');
+        console.log(`📡 Subscribed to ${statusTopic}`);
       }
     });
   });
 
   mqttClient.on('message', async (topic, message) => {
     const msgString = message.toString();
-    console.log(`📨 MQTT Message Received on topic: ${topic} | message: ${msgString}`);
+    console.log(`📨 MQTT message, Device: ${topic} | message: ${msgString}`);
   
     // ✅ Handle pesan register (ESP device online)
     if (topic.match(/^parcela\/[^/]+\/register$/)) {
       try {
+        if (!msgString) return; // 🛡️ Skip jika message kosong
         const payload = JSON.parse(msgString);
         const { deviceId, status } = payload;
   
@@ -111,6 +142,7 @@ export const startMqttService = () => {
     // ✅ Handle pesan status disconnect (LWT)
     if (topic.match(/^parcela\/[^/]+\/status$/)) {
       try {
+        if (!msgString) return; // 🛡️ Skip jika message kosong
         const payload = JSON.parse(msgString);
         const { deviceId, status } = payload;
     
@@ -130,8 +162,16 @@ export const startMqttService = () => {
         if (status.toLowerCase() === 'offline') {
           const controlTopic = `parcela/${deviceId}/control`;
           const alarmOffPayload = 'ALARM_OFF';
-        
+          const recentlyPublished: Record<string, number> = {};
+          
           const publishAlarmOff = () => {
+            const now = Date.now();
+            if (recentlyPublished[controlTopic] && now - recentlyPublished[controlTopic] < 5000) {
+              return; // Skip jika dalam 5 detik sudah pernah publish
+            }
+          
+            recentlyPublished[controlTopic] = now;
+          
             if (client?.connected) {
               client.publish(controlTopic, alarmOffPayload, {}, (err) => {
                 if (err) {
