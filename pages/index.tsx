@@ -87,7 +87,7 @@ export default function Dashboard() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Packet (Receipt Number / Order)"
+              placeholder="Search Packet (Receipt Number / Order / Customer Name...)"
               className="w-full border p-2.5 border-gray-300 rounded-xl text-black"
             />
           </div>
