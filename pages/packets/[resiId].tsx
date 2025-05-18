@@ -186,16 +186,63 @@ export default function PacketDetail() {
     }
   };
 
+  // const connectDeviceHandler = async () => {
+  //   if (!packet || isActionLoading) return;
+
+  //   if (availableDevices.length === 0) {
+  //     toast.error('No available devices found');
+  //     return;
+  //   }
+
+  //   const deviceId = selectedDevice || availableDevices[0].device_id;
+
+  //   setIsActionLoading(true);
+  //   try {
+  //     toast.loading('Connecting device...');
+  //     await connectDevice(packet.resi, deviceId);
+  //     toast.dismiss();
+  //     toast.success(`Device ${deviceId} connected to Rcpt: ${packet.resi}`);
+  //     setPacket((prev) => (prev ? { ...prev, device_id: deviceId } : prev));
+  //     setAvailableDevices(availableDevices.filter((device) => device.device_id !== deviceId));
+  //     setSelectedDevice('');
+  //   } catch (err: any) {
+  //     toast.dismiss();
+  //     toast.error(`Failed to connect device: ${err.message || 'Unknown error'}`);
+  //   } finally {
+  //     setIsActionLoading(false);
+  //   }
+  // };
+
+  // const disconnectDeviceHandler = async () => {
+  //   if (!packet || isActionLoading) return;
+
+  //   setIsActionLoading(true);
+  //   try {
+  //     toast.loading('Disconnecting device...');
+  //     await disconnectDevice(packet.resi);
+  //     toast.dismiss();
+  //     toast.success(`Device disconnected from Rspt ${packet.resi}`);
+  //     const disconnectedDevice = { device_id: packet.device_id!, last_seen: new Date().toISOString() };
+  //     setAvailableDevices([...availableDevices, disconnectedDevice]);
+  //     setPacket((prev) => (prev ? { ...prev, device_id: null } : prev));
+  //   } catch (err: any) {
+  //     toast.dismiss();
+  //     toast.error(`Failed to disconnect device: ${err.message || 'Unknown error'}`);
+  //   } finally {
+  //     setIsActionLoading(false);
+  //   }
+  // };
+
   const connectDeviceHandler = async () => {
     if (!packet || isActionLoading) return;
-
+  
     if (availableDevices.length === 0) {
       toast.error('No available devices found');
       return;
     }
-
+  
     const deviceId = selectedDevice || availableDevices[0].device_id;
-
+  
     setIsActionLoading(true);
     try {
       toast.loading('Connecting device...');
@@ -212,16 +259,16 @@ export default function PacketDetail() {
       setIsActionLoading(false);
     }
   };
-
+  
   const disconnectDeviceHandler = async () => {
     if (!packet || isActionLoading) return;
-
+  
     setIsActionLoading(true);
     try {
       toast.loading('Disconnecting device...');
       await disconnectDevice(packet.resi);
       toast.dismiss();
-      toast.success(`Device disconnected from Rspt ${packet.resi}`);
+      toast.success(`Device ${packet.device_id} disconnected from Rcpt ${packet.resi}`);
       const disconnectedDevice = { device_id: packet.device_id!, last_seen: new Date().toISOString() };
       setAvailableDevices([...availableDevices, disconnectedDevice]);
       setPacket((prev) => (prev ? { ...prev, device_id: null } : prev));

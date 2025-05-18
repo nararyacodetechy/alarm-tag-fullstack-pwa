@@ -102,6 +102,7 @@ export const startMqttService = () => {
         });
   
         console.log(`✅ Device upsert successful: ${deviceId} with status ${status}`);
+
       } catch (err) {
         console.error("❌ Failed to process register:", err);
       }
@@ -112,9 +113,9 @@ export const startMqttService = () => {
       try {
         const payload = JSON.parse(msgString);
         const { deviceId, status } = payload;
-  
+    
         if (!deviceId || !status) return;
-  
+    
         await prisma.device.updateMany({
           where: { device_id: deviceId },
           data: {
@@ -122,14 +123,37 @@ export const startMqttService = () => {
             updated_at: new Date(),
           },
         });
-  
+    
         console.log(`⚠️ Device status updated to '${status}': ${deviceId}`);
+    
+        // ✅ Kirim perintah ALARM_OFF jika disconnect
+        if (status.toLowerCase() === 'disconnected') {
+          const controlTopic = `parcela/${deviceId}/control`;
+          const alarmOffPayload = 'ALARM_OFF';
+        
+          const publishAlarmOff = () => {
+            if (client?.connected) {
+              client.publish(controlTopic, alarmOffPayload, {}, (err) => {
+                if (err) {
+                  console.error(`❌ Failed to publish ALARM_OFF to ${controlTopic}:`, err);
+                } else {
+                  console.log(`🔕 ALARM_OFF sent to ${controlTopic}`);
+                }
+              });
+            }
+          };
+        
+          // Coba kirim sekarang + ulangi dalam 2 dan 5 detik (jika ESP reconnect)
+          publishAlarmOff();
+          setTimeout(publishAlarmOff, 2000);
+          setTimeout(publishAlarmOff, 5000);
+        }        
+    
       } catch (err) {
         console.error("❌ Failed to process device status:", err);
       }
-    }
+    }    
   });
-  
 };
 
 

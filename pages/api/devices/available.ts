@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const availableDevices = await prisma.device.findMany({
         where: {
-          status: "connected",
+          status: "online",
           device_id: { notIn: usedIds as string[] },
         },
         select: {

@@ -1,7 +1,7 @@
 // pages/api/alarm/[action].ts
 import mqtt from 'mqtt';
 import { NextApiRequest, NextApiResponse } from 'next';
-import { connectMqtt } from '@/libs/mqttService';
+import { connectMqtt, getMqttClient } from '@/libs/mqttService';
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const mqttClient = connectMqtt();
+    const mqttClient = getMqttClient() ?? connectMqtt();
 
     // Handle MQTT connection with timeout
     const connectionTimeout = setTimeout(() => {
@@ -60,6 +60,10 @@ async function handlePublish(mqttClient: mqtt.MqttClient, resi: string, action: 
       where: { resi },
     });
 
+    if (!mqttClient.connected) {
+      return res.status(503).json({ status: 'error', message: 'MQTT broker belum siap' });
+    }    
+
     if (!packet || !packet.device_id) {
       return res.status(400).json({ status: 'error', message: 'Paket tidak memiliki device yang terhubung' });
     }
@@ -86,8 +90,10 @@ async function handlePublish(mqttClient: mqtt.MqttClient, resi: string, action: 
         console.error('Publish Error:', err);
         return res.status(500).json({ status: 'error', message: 'Gagal mengirim perintah ke device' });
       }
+      console.log(`✅ Published "${message}" to topic: ${topic}`);
       return res.status(200).json({ status: 'success', message: `Perintah ${action} berhasil dikirim` });
     });
+    
   } catch (error: any) {
     console.error('Error in handlePublish:', error);
     return res.status(500).json({ status: 'error', message: 'Gagal memproses perintah' });
