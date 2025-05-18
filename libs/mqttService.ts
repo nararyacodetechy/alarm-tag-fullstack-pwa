@@ -127,7 +127,7 @@ export const startMqttService = () => {
         console.log(`⚠️ Device status updated to '${status}': ${deviceId}`);
     
         // ✅ Kirim perintah ALARM_OFF jika disconnect
-        if (status.toLowerCase() === 'disconnected') {
+        if (status.toLowerCase() === 'offline') {
           const controlTopic = `parcela/${deviceId}/control`;
           const alarmOffPayload = 'ALARM_OFF';
         
