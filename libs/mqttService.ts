@@ -106,7 +106,7 @@ export const startMqttService = () => {
       if (err) {
         console.error(`[MQTT SERVICE] Failed to subscribe to ${registerTopic}:`, err);
       } else {
-        console.log(`[MQTT SERVICE] Subscribed tos ${registerTopic}`);
+        console.log(`[MQTT SERVICE] Subscribed to ${registerTopic}`);
       }
     });
 
@@ -137,13 +137,13 @@ export const startMqttService = () => {
           where: { device_id: deviceId },
           update: {
             status,
-            last_seen: new Date().toDateString(),
+            last_seen: new Date(),
             updated_at: new Date(),
           },
           create: {
             device_id: deviceId,
             status,
-            last_seen: new Date().toDateString(),
+            last_seen: new Date(),
           },
         });
 
