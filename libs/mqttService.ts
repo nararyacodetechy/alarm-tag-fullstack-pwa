@@ -143,7 +143,7 @@ export const startMqttService = () => {
           create: {
             device_id: deviceId,
             status,
-            last_seen: new Date(),
+            last_seen: new Date().toDateString(),
           },
         });
 
