@@ -203,62 +203,7 @@ export const startMqttService = () => {
       } catch (err) {
         console.error('[MQTT SERVICE] Failed to process device status:', err);
       }
-    }
-      
-    // ✅ Handle pesan status disconnect (LWT)
-    if (topic.match(/^parcela\/[^/]+\/status$/)) {
-      try {
-        if (!msgString) return; // 🛡️ Skip jika message kosong
-        const payload = JSON.parse(msgString);
-        const { deviceId, status } = payload;
-    
-        if (!deviceId || !status) return;
-    
-        await prisma.device.updateMany({
-          where: { device_id: deviceId },
-          data: {
-            status,
-            updated_at: new Date(),
-          },
-        });
-    
-        console.log(`[MQTT SERVICE] Device status updated to '${status}': ${deviceId}`);
-
-        // ✅ Kirim perintah ALARM_OFF jika disconnect
-        if (status.toLowerCase() === 'offline') {
-          const controlTopic = `parcela/${deviceId}/control`;
-          const alarmOffPayload = 'ALARM_OFF';
-          const recentlyPublished: Record<string, number> = {};
-          
-          const publishAlarmOff = () => {
-            const now = Date.now();
-            if (recentlyPublished[controlTopic] && now - recentlyPublished[controlTopic] < 5000) {
-              return;
-            }
-          
-            recentlyPublished[controlTopic] = now;
-          
-            if (client?.connected) {
-              client.publish(controlTopic, alarmOffPayload, {}, (err) => {
-                if (err) {
-                  console.error(`[MQTT SERVICE] Failed to publish ALARM_OFF to ${controlTopic}:`, err);
-                } else {
-                  console.log(`[MQTT SERVICE] ALARM_OFF sent to ${controlTopic}`);
-                }
-              });
-            }
-          };
-        
-          // Coba kirim sekarang + ulangi dalam 2 dan 5 detik (jika ESP reconnect)
-          publishAlarmOff();
-          setTimeout(publishAlarmOff, 2000);
-          setTimeout(publishAlarmOff, 5000);
-        }        
-    
-      } catch (err) {
-        console.error('[MQTT SERVICE] Failed to process device status:', err);
-      }
-    }    
+    }   
   });
 };
 

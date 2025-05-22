@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { device_id: { not: null } },
         select: { device_id: true },
       });
-      const usedIds = usedDeviceIds.map((packet) => packet.device_id);
+      const usedIds = usedDeviceIds.map((packet: { device_id: string | null }) => packet.device_id);
 
       const availableDevices = await prisma.device.findMany({
         where: {
