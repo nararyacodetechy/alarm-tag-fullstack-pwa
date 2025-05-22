@@ -66,7 +66,7 @@ export const connectMqtt = (): MqttClient => {
 
 export const subscribeToTopic = (topic: string, callback?: (err: Error | null) => void) => {
   if (!client) {
-    console.error('❌ MQTT client not initialized');
+    console.error('[MQTT SERVICE] MQTT client not initialized');
     return;
   }
 
@@ -137,7 +137,7 @@ export const startMqttService = () => {
           where: { device_id: deviceId },
           update: {
             status,
-            last_seen: new Date(),
+            last_seen: new Date().toDateString(),
             updated_at: new Date(),
           },
           create: {
