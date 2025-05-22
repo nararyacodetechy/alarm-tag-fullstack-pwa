@@ -1,6 +1,7 @@
 // libs/mqttService.ts
 import mqtt, { MqttClient } from 'mqtt';
 import { PrismaClient } from '@prisma/client';
+import { Device } from '@/types/device';
 
 const prisma = new PrismaClient();
 const subscribedTopics = new Set<string>();
@@ -21,6 +22,7 @@ export const clearRetainedMessage = (topic: string) => {
   
 export const connectMqtt = (): MqttClient => {
   if (client && client.connected) {
+    console.log('[MQTT SERVICE] MQTT client already connected');
     return client;
   }
 
@@ -29,21 +31,34 @@ export const connectMqtt = (): MqttClient => {
   const password = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
 
   if (!broker || !username || !password) {
+    console.error('[MQTT SERVICE] Missing MQTT environment variables');
     throw new Error('MQTT environment variables are not defined');
   }
 
   client = mqtt.connect(broker, {
     username,
     password,
+    reconnectPeriod: 1000, // Coba reconnect setiap 1 detik
+    keepalive: 10, // Ping setiap 10 detik
+    connectTimeout: 30000, // Timeout koneksi 30 detik
+    clientId: `nextag_${Math.random().toString(16).slice(3)}`, // ID unik untuk mencegah konflik
+  });
+
+  client.on('connect', () => {
+    console.log(`[MQTT SERVICE] Connected to broker at ${new Date().toISOString()}`);
   });
 
   client.on('error', (error) => {
-    console.error('❌ MQTT Service Error:', error);
+    console.error('[MQTT SERVICE] MQTT Error:', error);
   });
 
   client.on('close', () => {
-    console.log('🔌 MQTT Service: Connection closed');
-    client = null; // Reset client on close
+    console.log('[MQTT SERVICE] Connection closed');
+    // Tidak mengatur client = null, biarkan reconnect otomatis
+  });
+
+  client.on('reconnect', () => {
+    console.log('[MQTT SERVICE] Attempting to reconnect...');
   });
 
   return client;
@@ -56,15 +71,16 @@ export const subscribeToTopic = (topic: string, callback?: (err: Error | null) =
   }
 
   if (subscribedTopics.has(topic)) {
-    console.log(`⚠️ Already subscribed to ${topic}`);
+    console.log(`[MQTT SERVICE] Already subscribed to ${topic}`);
     return;
   }
 
   client.subscribe(topic, (err) => {
     if (err) {
-      console.error(`❌ Failed to subscribe to ${topic}:`, err);
+      console.error(`[MQTT SERVICE] Failed to subscribe to ${topic}:`, err);
     } else {
       subscribedTopics.add(topic);
+      console.log(`[MQTT SERVICE] Subscribed to ${topic}`);
     }
     callback?.(err);
   });
@@ -76,38 +92,38 @@ export const startMqttService = () => {
   mqttClient.on('connect', async () => {
     // 🔄 Ambil semua device dan hapus retained messages untuk topik register dan status
     try {
-      const devices = await prisma.device.findMany();
-      devices.forEach((device) => {
+      const devices: Device[] = await prisma.device.findMany(); // Gunakan tipe Device lokal
+      devices.forEach((device: Device) => {
         clearRetainedMessage(`parcela/${device.device_id}/register`);
         clearRetainedMessage(`parcela/${device.device_id}/status`);
       });
     } catch (err) {
-      console.error('❌ Failed to fetch devices for clearing retained messages:', err);
+      console.error('[MQTT SERVICE] Failed to fetch devices for clearing retained messages:', err);
     }
 
     // 📡 Subscribe ke topik-topik penting
     const registerTopic = 'parcela/+/register';
     subscribeToTopic(registerTopic, (err) => {
       if (err) {
-        console.error(`❌ Failed to subscribe to ${registerTopic}:`, err);
+        console.error(`[MQTT SERVICE] Failed to subscribe to ${registerTopic}:`, err);
       } else {
-        console.log(`📡 Subscribed to ${registerTopic}`);
+        console.log(`[MQTT SERVICE] Subscribed to ${registerTopic}`);
       }
     });
 
     const statusTopic = 'parcela/+/status';
     subscribeToTopic(statusTopic, (err) => {
       if (err) {
-        console.error(`❌ Failed to subscribe to ${statusTopic}:`, err);
+        console.error(`[MQTT SERVICE] Failed to subscribe to ${statusTopic}:`, err);
       } else {
-        console.log(`📡 Subscribed to ${statusTopic}`);
+        console.log(`[MQTT SERVICE] Subscribed to ${statusTopic}`);
       }
     });
   });
 
   mqttClient.on('message', async (topic, message) => {
     const msgString = message.toString();
-    console.log(`📨 MQTT message, Device: ${topic} | message: ${msgString}`);
+    console.log(`[MQTT SERVICE] Message received, Topic: ${topic} | Message: ${msgString}`);
   
     // ✅ Handle pesan register (ESP device online)
     if (topic.match(/^parcela\/[^/]+\/register$/)) {
@@ -132,10 +148,9 @@ export const startMqttService = () => {
           },
         });
   
-        console.log(`✅ Device upsert successful: ${deviceId} with status ${status}`);
-
+        console.log(`[MQTT SERVICE] Device upsert successful: ${deviceId} with status ${status}`);
       } catch (err) {
-        console.error("❌ Failed to process register:", err);
+        console.error('[MQTT SERVICE] Failed to process register:', err);
       }
     }
   
@@ -156,8 +171,8 @@ export const startMqttService = () => {
           },
         });
     
-        console.log(`⚠️ Device status updated to '${status}': ${deviceId}`);
-    
+        console.log(`[MQTT SERVICE] Device status updated to '${status}': ${deviceId}`);
+
         // ✅ Kirim perintah ALARM_OFF jika disconnect
         if (status.toLowerCase() === 'offline') {
           const controlTopic = `parcela/${deviceId}/control`;
@@ -167,7 +182,7 @@ export const startMqttService = () => {
           const publishAlarmOff = () => {
             const now = Date.now();
             if (recentlyPublished[controlTopic] && now - recentlyPublished[controlTopic] < 5000) {
-              return; // Skip jika dalam 5 detik sudah pernah publish
+              return;
             }
           
             recentlyPublished[controlTopic] = now;
@@ -175,9 +190,9 @@ export const startMqttService = () => {
             if (client?.connected) {
               client.publish(controlTopic, alarmOffPayload, {}, (err) => {
                 if (err) {
-                  console.error(`❌ Failed to publish ALARM_OFF to ${controlTopic}:`, err);
+                  console.error(`[MQTT SERVICE] Failed to publish ALARM_OFF to ${controlTopic}:`, err);
                 } else {
-                  console.log(`🔕 ALARM_OFF sent to ${controlTopic}`);
+                  console.log(`[MQTT SERVICE] ALARM_OFF sent to ${controlTopic}`);
                 }
               });
             }
@@ -190,7 +205,7 @@ export const startMqttService = () => {
         }        
     
       } catch (err) {
-        console.error("❌ Failed to process device status:", err);
+        console.error('[MQTT SERVICE] Failed to process device status:', err);
       }
     }    
   });
@@ -200,7 +215,7 @@ export const startMqttService = () => {
 export const stopMqttService = () => {
   if (client) {
     client.end(true);
-    console.log('🔌 MQTT Service stopped');
+    console.log('[MQTT SERVICE] MQTT Service stopped');
     client = null;
   }
 };

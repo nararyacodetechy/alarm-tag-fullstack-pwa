@@ -12,24 +12,38 @@ export type AlarmResponse = {
 };
 
 // Helper function to handle fetch requests
-const fetchAlarmAction = async (resi: string, action: 'on' | 'off' | 'reset'): Promise<AlarmResponse> => {
-  try {
-    const response = await fetch(`${API_URL}/alarm/${action}?resi=${resi}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+const fetchAlarmAction = async (resi: string, action: 'on' | 'off' | 'reset', retries = 3): Promise<AlarmResponse> => {
+  let attempts = 0;
+  while (attempts < retries) {
+    attempts++;
+    console.log(`[ALARM SERVICE] Attempt ${attempts} for action: ${action} on resi: ${resi}`);
 
-    const data: AlarmResponse = await response.json();
+    try {
+      const response = await fetch(`${API_URL}/alarm/${action}?resi=${resi}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000), // Timeout 10 detik per request
+      });
 
-    if (!response.ok || data.status === 'error') {
-      throw new Error(data.message || `Failed to perform ${action} action`);
+      const data: AlarmResponse = await response.json();
+
+      if (!response.ok || data.status === 'error') {
+        throw new Error(data.message || `Failed to perform ${action} action`);
+      }
+
+      console.log(`[ALARM SERVICE] Success for action: ${action} on resi: ${resi}`);
+      return data;
+    } catch (error: any) {
+      console.error(`[ALARM SERVICE] Error in attempt ${attempts} for ${action} on resi: ${resi}:`, error);
+      if (attempts < retries) {
+        console.log(`[ALARM SERVICE] Retrying in 1 second...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } else {
+        throw new Error(error.message || `Failed to perform ${action} action after ${retries} attempts`);
+      }
     }
-
-    return data;
-  } catch (error: any) {
-    console.error(`Error in ${action} alarm action:`, error);
-    throw new Error(error.message || `Failed to perform ${action} action`);
   }
+  throw new Error(`Failed to perform ${action} action after ${retries} attempts`);
 };
 
 export const turnOn = (resi: string) => fetchAlarmAction(resi, 'on');

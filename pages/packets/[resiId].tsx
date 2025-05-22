@@ -76,9 +76,9 @@ export default function PacketDetail() {
         setIsLoadingDevices(true);
         const devices = await getAvailableDevices();
         setAvailableDevices(devices);
-        console.log('Available devices:', devices);
+        console.log('[FRONTEND] Available devices:', devices);
       } catch (err: any) {
-        console.error('Error fetching available devices:', err);
+        console.error('[FRONTEND] Error fetching available devices:', err);
         toast.error(`Failed to load available devices: ${err.message}`);
       } finally {
         setIsLoadingDevices(false);
@@ -90,18 +90,24 @@ export default function PacketDetail() {
   }, [resiId]);
 
   const handleRequest = async (cb: () => Promise<AlarmResponse>, successText: string) => {
-    if (isActionLoading || !isDeviceReady) return;
+    if (isActionLoading || !isDeviceReady) {
+      console.log('[FRONTEND] Action blocked:', { isActionLoading, isDeviceReady });
+      return;
+    }
     setIsActionLoading(true);
     try {
+      console.log('[FRONTEND] Sending alarm request:', successText);
       toast.loading('Processing...');
       const response = await cb();
       setStatus(successText);
       toast.dismiss();
       toast.success(response.message);
+      console.log('[FRONTEND] Alarm request successful:', response);
     } catch (error: any) {
       setStatus('Failed to perform action');
       toast.dismiss();
       toast.error(error.message || 'Failed to perform action');
+      console.error('[FRONTEND] Alarm request failed:', error);
     } finally {
       setIsActionLoading(false);
     }
@@ -145,12 +151,13 @@ export default function PacketDetail() {
       setIsEditing(false);
 
       if (form.resi !== packet.resi) {
-        console.log(`Navigating to new resi: ${form.resi}`);
+        console.log(`[FRONTEND] Navigating to new resi: ${form.resi}`);
         router.push(`/packets/${form.resi}`);
       }
     } catch (err: any) {
       toast.dismiss();
       toast.error(`Failed to update packet: ${err.message || 'Unknown error'}`);
+      console.error('[FRONTEND] Update packet failed:', err);
     } finally {
       setIsActionLoading(false);
     }
@@ -173,6 +180,7 @@ export default function PacketDetail() {
     } catch (err: any) {
       toast.dismiss();
       toast.error(`Failed to remove packet: ${err.message || 'Unknown error'}`);
+      console.error('[FRONTEND] Delete packet failed:', err);
     } finally {
       setIsActionLoading(false);
     }
@@ -191,7 +199,7 @@ export default function PacketDetail() {
 
   const connectDeviceHandler = async () => {
     if (!packet || isActionLoading || !isDeviceReady || isLoadingDevices) {
-      console.log('[CONNECT] Action blocked:', {
+      console.log('[FRONTEND] [CONNECT] Action blocked:', {
         hasPacket: !!packet,
         isActionLoading,
         isDeviceReady,
@@ -220,13 +228,13 @@ export default function PacketDetail() {
       setPacket((prev) => (prev ? { ...prev, device_id: deviceId } : prev));
       setAvailableDevices(availableDevices.filter((device) => device.device_id !== deviceId));
       setSelectedDevice('');
-      setIsDeviceReady(true); // Perangkat tetap siap setelah connect
-      console.log('[CONNECT] Success:', { deviceId, resi: packet.resi });
+      setIsDeviceReady(true);
+      console.log('[FRONTEND] [CONNECT] Success:', { deviceId, resi: packet.resi });
     } catch (err: any) {
-      console.error('[CONNECT] Error:', err);
+      console.error('[FRONTEND] [CONNECT] Error:', err);
       toast.dismiss();
       toast.error(`Failed to connect device: ${err.message || 'Unknown error'}`);
-      setIsDeviceReady(false); // Tandai tidak siap jika gagal
+      setIsDeviceReady(false);
     } finally {
       setIsActionLoading(false);
     }
@@ -234,34 +242,38 @@ export default function PacketDetail() {
 
   const disconnectDeviceHandler = async () => {
     if (!packet || isActionLoading || !isDeviceReady) {
-      console.log('[DISCONNECT] Action blocked:', {
+      console.log('[FRONTEND] [DISCONNECT] Action blocked:', {
         hasPacket: !!packet,
         isActionLoading,
         isDeviceReady,
-        hasDeviceId: packet ? !!packet.device_id : false, // Perbaikan logging
+        hasDeviceId: packet ? !!packet.device_id : false,
       });
       return;
     }
-
+  
     if (!packet.device_id) {
-      console.log('[DISCONNECT] No device_id found for packet');
+      console.log('[FRONTEND] [DISCONNECT] No device_id found for packet');
       toast.error('No device connected to this packet');
       return;
     }
-
+  
     setIsActionLoading(true);
     try {
       toast.loading('Disconnecting device...');
       await disconnectDevice(packet.resi);
       toast.dismiss();
       toast.success(`Device ${packet.device_id} disconnected from Rcpt ${packet.resi}`);
-      const disconnectedDevice = { device_id: packet.device_id!, last_seen: new Date().toISOString() };
+      const disconnectedDevice: Device = {
+        device_id: packet.device_id!,
+        last_seen: new Date().toISOString(),
+        status: 'online', // Tambahkan status default
+      };
       setAvailableDevices([...availableDevices, disconnectedDevice]);
       setPacket((prev) => (prev ? { ...prev, device_id: null } : prev));
       setIsDeviceReady(true);
-      console.log('[DISCONNECT] Success:', { deviceId: packet.device_id, resi: packet.resi });
+      console.log('[FRONTEND] [DISCONNECT] Success:', { deviceId: packet.device_id, resi: packet.resi });
     } catch (err: any) {
-      console.error('[DISCONNECT] Error:', err);
+      console.error('[FRONTEND] [DISCONNECT] Error:', err);
       toast.dismiss();
       toast.error(`Failed to disconnect device: ${err.message || 'Unknown error'}`);
       setIsDeviceReady(false);
@@ -271,7 +283,7 @@ export default function PacketDetail() {
   };
 
   const handleBack = () => {
-    console.log('Navigating back to dashboard from resi:', resiId);
+    console.log('[FRONTEND] Navigating back to dashboard from resi:', resiId);
     router.push('/');
   };
 
@@ -285,12 +297,12 @@ export default function PacketDetail() {
       setIsLoadingDevices(true);
       const devices = await getAvailableDevices();
       setAvailableDevices(devices);
-      console.log('Available devices:', devices);
-      setIsDeviceReady(true); // Tandai siap setelah fetch berhasil
+      console.log('[FRONTEND] Available devices:', devices);
+      setIsDeviceReady(true);
     } catch (err: any) {
-      console.error('Error fetching available devices:', err);
+      console.error('[FRONTEND] Error fetching available devices:', err);
       toast.error(`Failed to load available devices: ${err.message}`);
-      setIsDeviceReady(false); // Tandai tidak siap jika gagal
+      setIsDeviceReady(false);
     } finally {
       setIsLoadingDevices(false);
     }
