@@ -42,6 +42,7 @@ export const connectMqtt = (): MqttClient => {
     keepalive: 10, // Ping setiap 10 detik
     connectTimeout: 30000, // Timeout koneksi 30 detik
     clientId: `nextag_${Math.random().toString(16).slice(3)}`, // ID unik untuk mencegah konflik
+    clean: true,
   });
 
   client.on('connect', () => {
@@ -53,8 +54,11 @@ export const connectMqtt = (): MqttClient => {
   });
 
   client.on('close', () => {
-    console.log('[MQTT SERVICE] Connection closed');
-    // Tidak mengatur client = null, biarkan reconnect otomatis
+    console.log('[MQTT SERVICE] Connection closed at', new Date().toISOString());
+  });
+
+  client.on('offline', () => {
+    console.log('[MQTT SERVICE] Client went offline at', new Date().toISOString());
   });
 
   client.on('reconnect', () => {

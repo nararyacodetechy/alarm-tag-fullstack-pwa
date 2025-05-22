@@ -17,4 +17,12 @@ module.exports = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'https://nextag.up.railway.app/api/:path*', // proxy ke backend
+      },
+    ];
+  },
 };
