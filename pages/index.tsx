@@ -69,7 +69,7 @@ export default function Dashboard() {
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold">Dashboard Packet</h1>
           <div className="mt-2 text-lg">
-            Total Packet: {isLoading ? 'Loading...' : totalPackets ?? 0}
+            Total Packets: {isLoading ? 'Loading...' : totalPackets ?? 0}
           </div>
         </div>
 
