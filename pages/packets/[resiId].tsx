@@ -265,7 +265,7 @@ export default function PacketDetail() {
       toast.success(`Device ${packet.device_id} disconnected from Rcpt ${packet.resi}`);
       const disconnectedDevice: Device = {
         device_id: packet.device_id!,
-        last_seen: new Date().toISOString(),
+        last_seen: new Date(),
         status: 'online', // Tambahkan status default
       };
       setAvailableDevices([...availableDevices, disconnectedDevice]);

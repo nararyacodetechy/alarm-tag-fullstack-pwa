@@ -90,9 +90,8 @@ export const startMqttService = () => {
   const mqttClient = connectMqtt();
 
   mqttClient.on('connect', async () => {
-    // 🔄 Ambil semua device dan hapus retained messages untuk topik register dan status
     try {
-      const devices: Device[] = await prisma.device.findMany(); // Gunakan tipe Device lokal
+      const devices: Device[] = await prisma.device.findMany(); // Gunakan tipe Device dari Prisma
       devices.forEach((device: Device) => {
         clearRetainedMessage(`parcela/${device.device_id}/register`);
         clearRetainedMessage(`parcela/${device.device_id}/status`);
@@ -124,16 +123,16 @@ export const startMqttService = () => {
   mqttClient.on('message', async (topic, message) => {
     const msgString = message.toString();
     console.log(`[MQTT SERVICE] Message received, Topic: ${topic} | Message: ${msgString}`);
-  
-    // ✅ Handle pesan register (ESP device online)
+
+    // Handle pesan register
     if (topic.match(/^parcela\/[^/]+\/register$/)) {
       try {
-        if (!msgString) return; // 🛡️ Skip jika message kosong
+        if (!msgString) return;
         const payload = JSON.parse(msgString);
         const { deviceId, status } = payload;
-  
+
         if (!deviceId || !status) return;
-  
+
         await prisma.device.upsert({
           where: { device_id: deviceId },
           update: {
@@ -147,13 +146,65 @@ export const startMqttService = () => {
             last_seen: new Date(),
           },
         });
-  
+
         console.log(`[MQTT SERVICE] Device upsert successful: ${deviceId} with status ${status}`);
       } catch (err) {
         console.error('[MQTT SERVICE] Failed to process register:', err);
       }
     }
-  
+
+    // Handle pesan status disconnect (LWT)
+    if (topic.match(/^parcela\/[^/]+\/status$/)) {
+      try {
+        if (!msgString) return;
+        const payload = JSON.parse(msgString);
+        const { deviceId, status } = payload;
+
+        if (!deviceId || !status) return;
+
+        await prisma.device.updateMany({
+          where: { device_id: deviceId },
+          data: {
+            status,
+            updated_at: new Date(),
+          },
+        });
+
+        console.log(`[MQTT SERVICE] Device status updated to '${status}': ${deviceId}`);
+
+        if (status.toLowerCase() === 'offline') {
+          const controlTopic = `parcela/${deviceId}/control`;
+          const alarmOffPayload = 'ALARM_OFF';
+          const recentlyPublished: Record<string, number> = {};
+
+          const publishAlarmOff = () => {
+            const now = Date.now();
+            if (recentlyPublished[controlTopic] && now - recentlyPublished[controlTopic] < 5000) {
+              return;
+            }
+
+            recentlyPublished[controlTopic] = now;
+
+            if (client?.connected) {
+              client.publish(controlTopic, alarmOffPayload, {}, (err) => {
+                if (err) {
+                  console.error(`[MQTT SERVICE] Failed to publish ALARM_OFF to ${controlTopic}:`, err);
+                } else {
+                  console.log(`[MQTT SERVICE] ALARM_OFF sent to ${controlTopic}`);
+                }
+              });
+            }
+          };
+
+          publishAlarmOff();
+          setTimeout(publishAlarmOff, 2000);
+          setTimeout(publishAlarmOff, 5000);
+        }
+      } catch (err) {
+        console.error('[MQTT SERVICE] Failed to process device status:', err);
+      }
+    }
+      
     // ✅ Handle pesan status disconnect (LWT)
     if (topic.match(/^parcela\/[^/]+\/status$/)) {
       try {
