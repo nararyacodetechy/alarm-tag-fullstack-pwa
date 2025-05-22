@@ -1,8 +1,9 @@
+// pages/packets/[resiId].tsx
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
 import Layout from '@/components/layouts/Layout';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Packet } from '@/types/packet';
 import { Device } from '@/types/device';
 import { ArrowLeft } from 'lucide-react';
@@ -20,7 +21,7 @@ import { toast, Toaster } from 'react-hot-toast';
 export default function PacketDetail() {
   const router = useRouter();
   const params = useParams();
-  const resiId = params?.resiId as string | undefined;
+  const resiId = params?.resiId as string | undefined; // Ambil resiId dari params
   const [packet, setPacket] = useState<Packet | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('Unknown');
@@ -31,7 +32,6 @@ export default function PacketDetail() {
   const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [isLoadingDevices, setIsLoadingDevices] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [isDeviceReady, setIsDeviceReady] = useState(false); // State baru untuk kesiapan perangkat
   const [form, setForm] = useState({
     resi: '',
     customer_name: '',
@@ -45,7 +45,6 @@ export default function PacketDetail() {
       setError('Invalid receipt number');
       setLoading(false);
       setIsLoadingDevices(false);
-      setIsDeviceReady(false);
       return;
     }
 
@@ -61,11 +60,9 @@ export default function PacketDetail() {
           device_id: data.device_id,
         });
         setError('');
-        setIsDeviceReady(true); // Tandai perangkat siap setelah data diambil
       } catch (err: any) {
         setError(err.message || 'Failed to load packet details');
         toast.error(err.message || 'Failed to load packet details');
-        setIsDeviceReady(false);
       } finally {
         setLoading(false);
       }
@@ -90,10 +87,8 @@ export default function PacketDetail() {
   }, [resiId]);
 
   const handleRequest = async (cb: () => Promise<AlarmResponse>, successText: string) => {
-    if (isActionLoading || !isDeviceReady) {
-      console.log('[FRONTEND] Action blocked:', { isActionLoading, isDeviceReady });
-      return;
-    }
+
+    if (isActionLoading) return;
     setIsActionLoading(true);
     try {
       console.log('[FRONTEND] Sending alarm request:', successText);
@@ -114,7 +109,7 @@ export default function PacketDetail() {
   };
 
   const handleUpdate = async () => {
-    if (!packet || isActionLoading || !isDeviceReady) return;
+    if (!packet || isActionLoading) return;
 
     if (form.resi.trim() === '') {
       toast.error('Receipt number cannot be empty');
@@ -164,7 +159,7 @@ export default function PacketDetail() {
   };
 
   const handleDelete = async () => {
-    if (!packet || isActionLoading || !isDeviceReady) return;
+    if (!packet || isActionLoading) return;
 
     const confirmDelete = window.confirm('Are you sure you want to delete this package?');
     if (!confirmDelete) return;
@@ -198,27 +193,15 @@ export default function PacketDetail() {
   };
 
   const connectDeviceHandler = async () => {
-    if (!packet || isActionLoading || !isDeviceReady || isLoadingDevices) {
-      console.log('[FRONTEND] [CONNECT] Action blocked:', {
-        hasPacket: !!packet,
-        isActionLoading,
-        isDeviceReady,
-        isLoadingDevices,
-      });
-      return;
-    }
-
+    if (!packet || isActionLoading) return;
+  
     if (availableDevices.length === 0) {
       toast.error('No available devices found');
       return;
     }
-
+  
     const deviceId = selectedDevice || availableDevices[0].device_id;
-    if (!deviceId) {
-      toast.error('No device selected');
-      return;
-    }
-
+  
     setIsActionLoading(true);
     try {
       toast.loading('Connecting device...');
@@ -228,35 +211,16 @@ export default function PacketDetail() {
       setPacket((prev) => (prev ? { ...prev, device_id: deviceId } : prev));
       setAvailableDevices(availableDevices.filter((device) => device.device_id !== deviceId));
       setSelectedDevice('');
-      setIsDeviceReady(true);
-      console.log('[FRONTEND] [CONNECT] Success:', { deviceId, resi: packet.resi });
     } catch (err: any) {
-      console.error('[FRONTEND] [CONNECT] Error:', err);
       toast.dismiss();
       toast.error(`Failed to connect device: ${err.message || 'Unknown error'}`);
-      setIsDeviceReady(false);
     } finally {
       setIsActionLoading(false);
     }
   };
-
+  
   const disconnectDeviceHandler = async () => {
-    if (!packet || isActionLoading || !isDeviceReady) {
-      console.log('[FRONTEND] [DISCONNECT] Action blocked:', {
-        hasPacket: !!packet,
-        isActionLoading,
-        isDeviceReady,
-        hasDeviceId: packet ? !!packet.device_id : false,
-      });
-      return;
-    }
-  
-    if (!packet.device_id) {
-      console.log('[FRONTEND] [DISCONNECT] No device_id found for packet');
-      toast.error('No device connected to this packet');
-      return;
-    }
-  
+    if (!packet || isActionLoading) return;  
     setIsActionLoading(true);
     try {
       toast.loading('Disconnecting device...');
@@ -270,13 +234,9 @@ export default function PacketDetail() {
       };
       setAvailableDevices([...availableDevices, disconnectedDevice]);
       setPacket((prev) => (prev ? { ...prev, device_id: null } : prev));
-      setIsDeviceReady(true);
-      console.log('[FRONTEND] [DISCONNECT] Success:', { deviceId: packet.device_id, resi: packet.resi });
     } catch (err: any) {
-      console.error('[FRONTEND] [DISCONNECT] Error:', err);
       toast.dismiss();
       toast.error(`Failed to disconnect device: ${err.message || 'Unknown error'}`);
-      setIsDeviceReady(false);
     } finally {
       setIsActionLoading(false);
     }
@@ -297,12 +257,10 @@ export default function PacketDetail() {
       setIsLoadingDevices(true);
       const devices = await getAvailableDevices();
       setAvailableDevices(devices);
-      console.log('[FRONTEND] Available devices:', devices);
-      setIsDeviceReady(true);
+      console.log('Available devices:', devices);
     } catch (err: any) {
       console.error('[FRONTEND] Error fetching available devices:', err);
       toast.error(`Failed to load available devices: ${err.message}`);
-      setIsDeviceReady(false);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -341,7 +299,7 @@ export default function PacketDetail() {
           ) : (
             <div className="bg-white space-y-6">
               <div>
-                <h3 className="font-semibold text-lg">Packet Information</h3>
+                <h3 className="font-semibold text-lg DISEBABKAN OLEH">Packet Information</h3>
                 {(['resi', 'customer_name', 'address', 'order'] as const).map((field) => {
                   const label =
                     field === 'resi'
@@ -373,7 +331,7 @@ export default function PacketDetail() {
                     <button
                       onClick={handleUpdate}
                       className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={isActionLoading || !isDeviceReady}
+                      disabled={isActionLoading}
                       aria-label="Save changes"
                     >
                       Save Changes
@@ -400,7 +358,7 @@ export default function PacketDetail() {
                   <button
                     onClick={() => setIsEditing(true)}
                     className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isActionLoading || !isDeviceReady}
+                    disabled={isActionLoading}
                     aria-label="Edit packet"
                   >
                     Edit
@@ -414,7 +372,7 @@ export default function PacketDetail() {
                   <button
                     onClick={handleRefreshDevices}
                     className="text-blue-600 hover:text-blue-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isLoadingDevices || isActionLoading || !isDeviceReady}
+                    disabled={isLoadingDevices || isActionLoading}
                     aria-label="Refresh available devices"
                   >
                     Refresh Devices
@@ -442,7 +400,7 @@ export default function PacketDetail() {
                           className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           value={selectedDevice}
                           onChange={(e) => setSelectedDevice(e.target.value)}
-                          disabled={isActionLoading || !isDeviceReady}
+                          disabled={isActionLoading}
                           aria-label="Select device"
                         >
                           <option value="">Select a device</option>
@@ -466,24 +424,19 @@ export default function PacketDetail() {
                   <button
                     onClick={disconnectDeviceHandler}
                     className="w-full border border-orange-700 text-orange-700 p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isActionLoading || !isDeviceReady || !packet.device_id}
-                    aria-label={isActionLoading ? 'Disconnecting device...' : 'Disconnect device'}
+                    disabled={isActionLoading}
+                    aria-label="Disconnect device"
                   >
-                    {isActionLoading ? 'Disconnecting...' : 'Disconnect Device'}
+                    Disconnect Device
                   </button>
                 ) : (
                   <button
                     onClick={connectDeviceHandler}
                     className="w-full border border-blue-700 text-blue-700 p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={
-                      isActionLoading ||
-                      !isDeviceReady ||
-                      availableDevices.length === 0 ||
-                      isLoadingDevices
-                    }
-                    aria-label={isActionLoading ? 'Connecting device...' : 'Connect device'}
+                    disabled={availableDevices.length === 0 || isLoadingDevices || isActionLoading}
+                    aria-label="Connect device"
                   >
-                    {isActionLoading ? 'Connecting...' : 'Connect Device'}
+                    Connect Device
                   </button>
                 )}
               </div>
@@ -499,7 +452,7 @@ export default function PacketDetail() {
                   <button
                     onClick={() => handleRequest(() => turnOn(packet.resi), 'Alarm is turned on 🔊')}
                     className="w-full border border-green-700 text-green-700 p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isActionLoading || !isDeviceReady}
+                    disabled={isActionLoading}
                     aria-label="Turn on alarm"
                   >
                     Turn On the Alarm
@@ -507,7 +460,7 @@ export default function PacketDetail() {
                   <button
                     onClick={() => handleRequest(() => turnOff(packet.resi), 'Alarm is turned off 🔕')}
                     className="w-full border border-red-700 text-red-700 p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isActionLoading || !isDeviceReady}
+                    disabled={isActionLoading}
                     aria-label="Turn off alarm"
                   >
                     Turn Off the Alarm
@@ -515,7 +468,7 @@ export default function PacketDetail() {
                   <button
                     onClick={() => handleRequest(() => resetAlarm(packet.resi), 'Alarm has been reset 🔄')}
                     className="w-full border border-gray-700 text-gray-700 p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isActionLoading || !isDeviceReady}
+                    disabled={isActionLoading}
                     aria-label="Reset alarm"
                   >
                     Reset Alarm
@@ -528,7 +481,7 @@ export default function PacketDetail() {
 
         <button
           onClick={handleDelete}
-          disabled={isNavigating || isActionLoading || !isDeviceReady}
+          disabled={isNavigating || isActionLoading}
           className="w-full border bg-red-700 hover:bg-red-600 text-white p-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Delete packet"
         >
